@@ -12,8 +12,32 @@ _lock_fh = open(_LOCK, 'w')
 try:
     fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
 except BlockingIOError:
-    print('ClipKit is already running.', file=sys.stderr)
-    sys.exit(0)
+    # Check if the PID in the lock file is actually alive
+    try:
+        with open(_LOCK) as _lf:
+            pid = int(_lf.read().strip() or '0')
+    except Exception:
+        pid = 0
+    alive = False
+    if pid:
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except (ProcessLookupError, PermissionError):
+            alive = False
+    if alive:
+        print('ClipKit is already running.', file=sys.stderr)
+        sys.exit(0)
+    # Stale lock — reopen and acquire
+    _lock_fh.close()
+    _lock_fh = open(_LOCK, 'w')
+    try:
+        fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('ClipKit is already running.', file=sys.stderr)
+        sys.exit(0)
+_lock_fh.write(str(os.getpid()))
+_lock_fh.flush()
 
 import rumps
 from clipboard_monitor import ClipboardMonitor
