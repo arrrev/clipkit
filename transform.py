@@ -117,13 +117,40 @@ def json_unstringify(text):
 
 
 def json_to_object(text):
-    """Parse JSON and pretty-print as a formatted object."""
-    import json
+    """Convert JSON to a JS object literal with unquoted keys and single-quoted strings."""
+    import json, re
     try:
         data = json.loads(text)
-        return json.dumps(data, indent=2, ensure_ascii=False)
     except Exception:
         raise ValueError('Input is not valid JSON')
+
+    def _convert(obj, indent=0):
+        pad = '    ' * indent
+        inner = '    ' * (indent + 1)
+        if isinstance(obj, dict):
+            if not obj:
+                return '{}'
+            lines = []
+            for k, v in obj.items():
+                key = k if re.match(r'^[A-Za-z_$][A-Za-z0-9_$]*$', k) else f"'{k}'"
+                lines.append(f"{inner}{key}: {_convert(v, indent + 1)},")
+            return '{\n' + '\n'.join(lines) + '\n' + pad + '}'
+        elif isinstance(obj, list):
+            if not obj:
+                return '[]'
+            lines = [f"{inner}{_convert(v, indent + 1)}," for v in obj]
+            return '[\n' + '\n'.join(lines) + '\n' + pad + ']'
+        elif isinstance(obj, bool):
+            return 'true' if obj else 'false'
+        elif obj is None:
+            return 'null'
+        elif isinstance(obj, (int, float)):
+            return str(obj)
+        else:
+            escaped = str(obj).replace('\\', '\\\\').replace("'", "\\'")
+            return f"'{escaped}'"
+
+    return _convert(data)
 
 
 def json_to_values(text):
