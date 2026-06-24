@@ -11,8 +11,8 @@ OPTIONS = {
         'CFBundleName': 'ClipKit',
         'CFBundleDisplayName': 'ClipKit',
         'CFBundleIdentifier': 'com.clipkit.app',
-        'CFBundleVersion': '1.0.0',
-        'CFBundleShortVersionString': '1.0',
+        'CFBundleVersion': '1.0.1',
+        'CFBundleShortVersionString': '1.0.1',
         'LSUIElement': True,          # no Dock icon
         'NSHighResolutionCapable': True,
         'NSAppleEventsUsageDescription': 'ClipKit needs access to monitor clipboard.',

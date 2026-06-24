@@ -5,18 +5,21 @@ from Foundation import NSObject, NSIndexSet, NSMutableArray
 from AppKit import (
     NSPanel, NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
     NSWindowStyleMaskResizable, NSBackingStoreBuffered,
-    NSMakeRect, NSScreen,
+    NSMakeRect, NSMakeSize, NSScreen,
     NSTextField, NSFont, NSColor, NSButton, NSSlider,
     NSScrollView, NSTableView, NSTableColumn,
     NSApplication, NSFloatingWindowLevel,
-    NSBezelStyleRounded, NSOnState, NSOffState,
+    NSBezelStyleRounded, NSBezelStyleInline, NSOnState, NSOffState,
     NSSwitchButton, NSViewWidthSizable, NSViewHeightSizable,
+    NSViewMinYMargin, NSViewMinXMargin,
     NSPasteboard, NSStringPboardType,
     NSTableViewDropAbove,
     NSButtonCell, NSView,
     NSWindowStyleMaskBorderless,
     NSEventModifierFlagCommand, NSEventModifierFlagOption,
     NSEventModifierFlagControl, NSEventModifierFlagShift,
+    NSTextAlignmentRight, NSTextAlignmentLeft, NSTextAlignmentCenter,
+    NSBox,
 )
 from transform import TRANSFORMS
 
@@ -39,7 +42,6 @@ def _flags_to_names(flags):
     if flags & NSEventModifierFlagCommand: parts.append('cmd')
     return parts
 
-# Special key names for display
 _KEYCODE_DISPLAY = {
     36: '↩', 48: '⇥', 49: '␣', 51: '⌫', 53: '⎋',
     122: 'F1', 120: 'F2', 99: 'F3', 118: 'F4', 96: 'F5',
@@ -55,8 +57,6 @@ _KEYCODE_NAMES = {
 
 
 class _RecorderView(NSView):
-    """Transparent overlay that becomes key and captures one key combo."""
-
     def initWithCallback_(self, callback):
         self = objc.super(_RecorderView, self).init()
         self._callback = callback
@@ -79,7 +79,6 @@ class _RecorderView(NSView):
             self._callback(None, None)
             return
 
-        # Get printable character
         chars = str(event.charactersIgnoringModifiers() or '').lower()
         if chars and chars.isprintable() and chars not in ('\x1b', '\r', '\t', '\x7f'):
             key_display = chars.upper()
@@ -88,9 +87,9 @@ class _RecorderView(NSView):
             key_display = _KEYCODE_DISPLAY[keycode]
             key_name = _KEYCODE_NAMES.get(keycode, chars)
         else:
-            return  # ignore modifier-only
+            return
 
-        if not flags:  # require at least one modifier
+        if not flags:
             if self._label:
                 self._label.setStringValue_('Need a modifier key (⌘ ⌥ ⌃ ⇧)')
             return
@@ -102,14 +101,12 @@ class _RecorderView(NSView):
 
 
 class HotkeyRecorderPanel(NSObject):
-    """Small floating panel that records one key combination."""
-
     def initWithParent_(self, parent_window):
         self = objc.super(HotkeyRecorderPanel, self).init()
         self._panel = None
         self._status_label = None
         self._view = None
-        self._active_callback = [None]  # mutable cell for closure
+        self._active_callback = [None]
         self.__setup(parent_window)
         return self
 
@@ -132,25 +129,24 @@ class HotkeyRecorderPanel(NSObject):
         title = NSTextField.labelWithString_('Press your hotkey combination')
         title.setFont_(NSFont.systemFontOfSize_(13))
         title.setFrame_(NSMakeRect(10, H - 36, W - 20, 20))
-        title.setAlignment_(1)
+        title.setAlignment_(NSTextAlignmentCenter)
         cv.addSubview_(title)
 
         self._status_label = NSTextField.labelWithString_('— waiting —')
         self._status_label.setFont_(NSFont.boldSystemFontOfSize_(20))
         self._status_label.setTextColor_(NSColor.systemBlueColor())
         self._status_label.setFrame_(NSMakeRect(10, H - 72, W - 20, 30))
-        self._status_label.setAlignment_(1)
+        self._status_label.setAlignment_(NSTextAlignmentCenter)
         cv.addSubview_(self._status_label)
 
         hint = NSTextField.labelWithString_('Escape = cancel / clear existing')
         hint.setFont_(NSFont.systemFontOfSize_(10))
         hint.setTextColor_(NSColor.secondaryLabelColor())
         hint.setFrame_(NSMakeRect(10, 8, W - 20, 16))
-        hint.setAlignment_(1)
+        hint.setAlignment_(NSTextAlignmentCenter)
         cv.addSubview_(hint)
 
         cb_cell = self._active_callback
-        lbl     = self._status_label
         panel   = self._panel
 
         def on_key(symbol, hotkey_str):
@@ -161,7 +157,7 @@ class HotkeyRecorderPanel(NSObject):
 
         self._view = _RecorderView.alloc().initWithCallback_(on_key)
         self._view.setFrame_(NSMakeRect(0, 0, W, H))
-        self._view.setLabel_(lbl)
+        self._view.setLabel_(self._status_label)
         cv.addSubview_(self._view)
 
     def recordForRow_callback_(self, row, callback):
@@ -176,11 +172,8 @@ _DRAG_TYPE = 'com.clipkit.transformrow'
 
 
 class TransformTableDataSource(NSObject):
-    """NSTableView data source + delegate for the transforms list."""
-
     def initWithRows_(self, rows):
         self = objc.super(TransformTableDataSource, self).init()
-        # rows: list of [name, enabled, hotkey_str]
         self._rows = list(rows)
         self._table = None
         return self
@@ -193,8 +186,6 @@ class TransformTableDataSource(NSObject):
     def rows(self):
         return self._rows
 
-    # ── NSTableViewDataSource ────────────────────────────────────────────────
-
     def numberOfRowsInTableView_(self, tv):
         return len(self._rows)
 
@@ -204,7 +195,7 @@ class TransformTableDataSource(NSObject):
         if ident == 'enabled':
             return NSOnState if enabled else NSOffState
         if ident == 'hotkey':
-            return hotkey or '+ set hotkey'
+            return hotkey or '+ set'
         return name
 
     def tableView_setObjectValue_forTableColumn_row_(self, tv, value, col, row):
@@ -215,15 +206,11 @@ class TransformTableDataSource(NSObject):
         elif ident == 'hotkey':
             self._rows[row] = [name, enabled, str(value or '').strip()]
 
-    # ── Drag source ──────────────────────────────────────────────────────────
-
     def tableView_writeRowsWithIndexes_toPasteboard_(self, tv, rowIndexes, pb):
         row = rowIndexes.firstIndex()
         pb.declareTypes_owner_([_DRAG_TYPE], None)
         pb.setString_forType_(str(row), _DRAG_TYPE)
         return True
-
-    # ── Drag destination ─────────────────────────────────────────────────────
 
     def tableView_validateDrop_proposedRow_proposedDropOperation_(
             self, tv, info, row, op):
@@ -244,8 +231,18 @@ class TransformTableDataSource(NSObject):
         return True
 
     def tableView_shouldEditTableColumn_row_(self, tv, col, row):
-        # Never allow inline text editing for hotkey — recorder handles it
         return False
+
+
+# ── Settings window ───────────────────────────────────────────────────────────
+
+SIDEBAR_W = 148
+NAV_ITEMS = [
+    ('general',    'General'),
+    ('transforms', 'Transforms'),
+    ('hotkeys',    'Hotkeys'),
+    ('history',    'History'),
+]
 
 
 class SettingsWindowController(NSObject):
@@ -261,17 +258,20 @@ class SettingsWindowController(NSObject):
         self._ds = None
         self._table = None
         self._recorder = None
+        self._panels = {}       # section key → NSView panel
+        self._nav_btns = {}     # section key → NSButton
+        self._active_section = 'general'
         self._build()
         return self
 
     def _build(self):
-        w, h = 440, 620
+        W, H = 620, 520
         screen = NSScreen.mainScreen().frame()
-        x = (screen.size.width - w) / 2
-        y = (screen.size.height - h) / 2
+        x = (screen.size.width - W) / 2
+        y = (screen.size.height - H) / 2
 
         self._window = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(x, y, w, h),
+            NSMakeRect(x, y, W, H),
             NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable,
             NSBackingStoreBuffered, False)
         self._window.setTitle_('ClipKit — Settings')
@@ -280,106 +280,177 @@ class SettingsWindowController(NSObject):
         self._window.setDelegate_(self)
 
         cv = self._window.contentView()
+        BOTTOM_BAR_H = 50
+
+        # ── Bottom bar ────────────────────────────────────────────────────────
+        bottom = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, W, BOTTOM_BAR_H))
+        bottom.setAutoresizingMask_(NSViewWidthSizable)
+        bottom.setWantsLayer_(True)
+        bottom.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+
+        sep_b = NSView.alloc().initWithFrame_(NSMakeRect(0, BOTTOM_BAR_H - 1, W, 1))
+        sep_b.setAutoresizingMask_(NSViewWidthSizable)
+        sep_b.setWantsLayer_(True)
+        sep_b.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        bottom.addSubview_(sep_b)
+
+        save_btn = NSButton.alloc().initWithFrame_(NSMakeRect(W - 110, 10, 96, 30))
+        save_btn.setTitle_('Save')
+        save_btn.setBezelStyle_(NSBezelStyleRounded)
+        save_btn.setTarget_(self)
+        save_btn.setAction_('saveSettings:')
+        save_btn.setKeyEquivalent_('\r')
+        save_btn.setAutoresizingMask_(NSViewMinXMargin)
+        bottom.addSubview_(save_btn)
+
+        cancel_btn = NSButton.alloc().initWithFrame_(NSMakeRect(W - 214, 10, 96, 30))
+        cancel_btn.setTitle_('Cancel')
+        cancel_btn.setBezelStyle_(NSBezelStyleRounded)
+        cancel_btn.setTarget_(self)
+        cancel_btn.setAction_('cancelSettings:')
+        cancel_btn.setKeyEquivalent_('\x1b')
+        cancel_btn.setAutoresizingMask_(NSViewMinXMargin)
+        bottom.addSubview_(cancel_btn)
+
+        cv.addSubview_(bottom)
+
+        # ── Sidebar ───────────────────────────────────────────────────────────
+        sidebar_h = H - BOTTOM_BAR_H
+        sidebar = NSView.alloc().initWithFrame_(
+            NSMakeRect(0, BOTTOM_BAR_H, SIDEBAR_W, sidebar_h))
+        sidebar.setAutoresizingMask_(NSViewHeightSizable)
+        sidebar.setWantsLayer_(True)
+        sidebar.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+
+        sep_s = NSView.alloc().initWithFrame_(
+            NSMakeRect(SIDEBAR_W - 1, 0, 1, sidebar_h))
+        sep_s.setAutoresizingMask_(NSViewHeightSizable)
+        sep_s.setWantsLayer_(True)
+        sep_s.layer().setBackgroundColor_(NSColor.separatorColor().CGColor())
+        sidebar.addSubview_(sep_s)
+
+        ny = sidebar_h - 16
+        for key, label in NAV_ITEMS:
+            ny -= 34
+            btn = NSButton.alloc().initWithFrame_(NSMakeRect(8, ny, SIDEBAR_W - 16, 30))
+            btn.setTitle_(label)
+            btn.setBezelStyle_(NSBezelStyleInline)
+            btn.setTarget_(self)
+            btn.setAction_('navSelected:')
+            btn.setIdentifier_(key)
+            sidebar.addSubview_(btn)
+            self._nav_btns[key] = btn
+
+        cv.addSubview_(sidebar)
+
+        # ── Content area ──────────────────────────────────────────────────────
+        content_x = SIDEBAR_W
+        content_w = W - SIDEBAR_W
+        content_h = sidebar_h
+
         cfg = S.get()
-        y_cur = h - 20
 
-        def section(title, y):
-            lbl = NSTextField.labelWithString_(title)
-            lbl.setFont_(NSFont.boldSystemFontOfSize_(13))
-            lbl.setTextColor_(NSColor.secondaryLabelColor())
-            lbl.setFrame_(NSMakeRect(20, y, w - 40, 20))
-            cv.addSubview_(lbl)
+        # -- General panel
+        gen = self._make_panel(content_x, BOTTOM_BAR_H, content_w, content_h)
+        self._build_general(gen, content_w, content_h, cfg)
+        cv.addSubview_(gen)
+        self._panels['general'] = gen
 
-        def label(text, y, size=13):
-            lbl = NSTextField.labelWithString_(text)
-            lbl.setFont_(NSFont.systemFontOfSize_(size))
-            lbl.setFrame_(NSMakeRect(20, y, w - 40, 20))
-            cv.addSubview_(lbl)
-            return lbl
+        # -- Transforms panel
+        tfm = self._make_panel(content_x, BOTTOM_BAR_H, content_w, content_h)
+        self._build_transforms(tfm, content_w, content_h, cfg)
+        cv.addSubview_(tfm)
+        self._panels['transforms'] = tfm
 
-        # ── General ───────────────────────────────────────────────────────────
-        y_cur -= 30
-        section('General', y_cur)
+        # -- Hotkeys panel
+        hk = self._make_panel(content_x, BOTTOM_BAR_H, content_w, content_h)
+        self._build_hotkeys(hk, content_w, content_h)
+        cv.addSubview_(hk)
+        self._panels['hotkeys'] = hk
 
-        y_cur -= 34
-        self._startup_btn = NSButton.alloc().initWithFrame_(NSMakeRect(20, y_cur, w - 40, 24))
+        # -- History panel
+        hist = self._make_panel(content_x, BOTTOM_BAR_H, content_w, content_h)
+        self._build_history(hist, content_w, content_h, cfg)
+        cv.addSubview_(hist)
+        self._panels['history'] = hist
+
+        self._recorder = HotkeyRecorderPanel.alloc().initWithParent_(self._window)
+        self._select_section('general')
+
+    # ── Panel factory ─────────────────────────────────────────────────────────
+
+    def _make_panel(self, x, y, w, h):
+        v = NSView.alloc().initWithFrame_(NSMakeRect(x, y, w, h))
+        v.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
+        v.setHidden_(True)
+        return v
+
+    def _section_title(self, parent, text, y, w):
+        lbl = NSTextField.labelWithString_(text.upper())
+        lbl.setFont_(NSFont.boldSystemFontOfSize_(10))
+        lbl.setTextColor_(NSColor.tertiaryLabelColor())
+        lbl.setFrame_(NSMakeRect(20, y, w - 40, 14))
+        parent.addSubview_(lbl)
+        return lbl
+
+    def _row_view(self, parent, y, w, h=44):
+        """A rounded card-style row."""
+        row = NSView.alloc().initWithFrame_(NSMakeRect(16, y, w - 32, h))
+        row.setWantsLayer_(True)
+        row.layer().setBackgroundColor_(NSColor.controlBackgroundColor().CGColor())
+        row.layer().setCornerRadius_(8)
+        row.layer().setBorderWidth_(0.5)
+        row.layer().setBorderColor_(NSColor.separatorColor().CGColor())
+        parent.addSubview_(row)
+        return row
+
+    # ── General panel ─────────────────────────────────────────────────────────
+
+    def _build_general(self, parent, w, h, cfg):
+        PAD = 20
+        y = h - 20
+
+        y -= 28
+        self._section_title(parent, 'Startup', y, w)
+
+        y -= 50
+        row = self._row_view(parent, y, w)
+        lbl = NSTextField.labelWithString_('Launch at login')
+        lbl.setFont_(NSFont.systemFontOfSize_(13))
+        lbl.setFrame_(NSMakeRect(14, 11, w - 80, 20))
+        row.addSubview_(lbl)
+
+        self._startup_btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 32 - 60, 11, 44, 22))
         self._startup_btn.setButtonType_(NSSwitchButton)
-        self._startup_btn.setTitle_('Launch ClipKit at login')
+        self._startup_btn.setTitle_('')
         self._startup_btn.setState_(NSOnState if startup.is_enabled() else NSOffState)
         self._startup_btn.setTarget_(self)
         self._startup_btn.setAction_('toggleStartup:')
-        cv.addSubview_(self._startup_btn)
+        row.addSubview_(self._startup_btn)
 
-        # ── Buffer ────────────────────────────────────────────────────────────
-        y_cur -= 44
-        section('Clipboard Buffer', y_cur)
+    # ── Transforms panel ─────────────────────────────────────────────────────
 
-        y_cur -= 30
-        label('Max items to remember:', y_cur)
+    def _build_transforms(self, parent, w, h, cfg):
+        y = h - 20
 
-        y_cur -= 30
-        self._items_slider = NSSlider.alloc().initWithFrame_(NSMakeRect(20, y_cur, w - 120, 24))
-        self._items_slider.setMinValue_(20)
-        self._items_slider.setMaxValue_(500)
-        self._items_slider.setIntValue_(cfg.max_items)
-        self._items_slider.setTarget_(self)
-        self._items_slider.setAction_('sliderChanged:')
-        cv.addSubview_(self._items_slider)
+        y -= 24
+        self._section_title(parent, 'Transforms  ·  drag to reorder  ·  click hotkey to set', y, w)
 
-        self._items_label = NSTextField.labelWithString_(str(cfg.max_items))
-        self._items_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
-        self._items_label.setFrame_(NSMakeRect(w - 90, y_cur, 70, 24))
-        cv.addSubview_(self._items_label)
-
-        y_cur -= 30
-        label('Max buffer size (MB):', y_cur)
-
-        y_cur -= 30
-        self._mb_slider = NSSlider.alloc().initWithFrame_(NSMakeRect(20, y_cur, w - 120, 24))
-        self._mb_slider.setMinValue_(10)
-        self._mb_slider.setMaxValue_(500)
-        self._mb_slider.setIntValue_(cfg.buffer_size_mb)
-        self._mb_slider.setTarget_(self)
-        self._mb_slider.setAction_('mbSliderChanged:')
-        cv.addSubview_(self._mb_slider)
-
-        self._mb_label = NSTextField.labelWithString_(f'{cfg.buffer_size_mb} MB')
-        self._mb_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
-        self._mb_label.setFrame_(NSMakeRect(w - 90, y_cur, 70, 24))
-        cv.addSubview_(self._mb_label)
-
-        # ── Hotkeys ───────────────────────────────────────────────────────────
-        y_cur -= 44
-        section('Hotkeys', y_cur)
-
-        y_cur -= 28
-        label('Open History:      ⌘ ⌥ V', y_cur)
-        y_cur -= 24
-        label('Transform Text:   ⌘ ⌥ T', y_cur)
-
-        # ── Transforms ────────────────────────────────────────────────────────
-        y_cur -= 44
-        section('Transforms  (drag to reorder · uncheck to hide · set hotkey)', y_cur)
-        y_cur -= 16
-        label('Hotkey format: cmd+alt+1  or  ctrl+shift+f1  (applied to latest clipboard)', y_cur, size=11)
-        y_cur -= 8
-
-        scroll_h = y_cur - 50
-        sv = NSScrollView.alloc().initWithFrame_(NSMakeRect(16, 50, w - 32, scroll_h))
+        y -= 14
+        scroll_h = y - 8
+        sv = NSScrollView.alloc().initWithFrame_(NSMakeRect(16, 8, w - 32, scroll_h))
         sv.setHasVerticalScroller_(True)
         sv.setBorderType_(2)
         sv.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
 
         tv = NSTableView.alloc().initWithFrame_(NSMakeRect(0, 0, w - 32, scroll_h))
         tv.setUsesAlternatingRowBackgroundColors_(True)
-        tv.setRowHeight_(22)
+        tv.setRowHeight_(26)
         tv.setAllowsMultipleSelection_(False)
 
-        # Header
         from AppKit import NSTableHeaderView
-        tv.setHeaderView_(NSTableHeaderView.alloc().initWithFrame_(NSMakeRect(0, 0, w - 32, 18)))
+        tv.setHeaderView_(NSTableHeaderView.alloc().initWithFrame_(NSMakeRect(0, 0, w - 32, 22)))
 
-        # Checkbox column
         chk_col = NSTableColumn.alloc().initWithIdentifier_('enabled')
         chk_col.setWidth_(28)
         chk_col.setMinWidth_(28)
@@ -391,13 +462,11 @@ class SettingsWindowController(NSObject):
         chk_col.setDataCell_(cell)
         tv.addTableColumn_(chk_col)
 
-        # Name column
         name_col = NSTableColumn.alloc().initWithIdentifier_('name')
         name_col.setWidth_(w - 32 - 28 - 110 - 16)
         name_col.headerCell().setStringValue_('Transform')
         tv.addTableColumn_(name_col)
 
-        # Hotkey column
         hk_col = NSTableColumn.alloc().initWithIdentifier_('hotkey')
         hk_col.setWidth_(105)
         hk_col.setMinWidth_(80)
@@ -409,38 +478,112 @@ class SettingsWindowController(NSObject):
         self._ds.setTable_(tv)
         tv.setDataSource_(self._ds)
         tv.setDelegate_(self._ds)
-
         tv.setTarget_(self)
         tv.setAction_('tableClicked:')
         sv.setDocumentView_(tv)
-        cv.addSubview_(sv)
+        parent.addSubview_(sv)
         self._table = tv
-        self._recorder = HotkeyRecorderPanel.alloc().initWithParent_(self._window)
 
-        # ── Save button ───────────────────────────────────────────────────────
-        save_btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 120, 14, 100, 30))
-        save_btn.setTitle_('Save')
-        save_btn.setBezelStyle_(NSBezelStyleRounded)
-        save_btn.setTarget_(self)
-        save_btn.setAction_('saveSettings:')
-        cv.addSubview_(save_btn)
+    # ── Hotkeys panel ─────────────────────────────────────────────────────────
 
-    def _build_rows(self, cfg):
-        """Build ordered [name, enabled, hotkey] rows respecting saved order."""
-        hidden = set(cfg.hidden_transforms)
-        hotkeys = cfg.transform_hotkeys
-        all_names = [name for name, _, _ in TRANSFORMS]
-        order = cfg.transform_order or all_names
-        seen = set()
-        names = []
-        for name in order:
-            if name in set(all_names):
-                names.append(name)
-                seen.add(name)
-        for name in all_names:
-            if name not in seen:
-                names.append(name)
-        return [[name, name not in hidden, hotkeys.get(name, '')] for name in names]
+    def _build_hotkeys(self, parent, w, h):
+        y = h - 20
+
+        y -= 28
+        self._section_title(parent, 'Global Hotkeys', y, w)
+
+        for label, hk in [('Open History', '⌘ ⌥ V'), ('Transform Text', '⌘ ⌥ T')]:
+            y -= 50
+            row = self._row_view(parent, y, w)
+            lbl = NSTextField.labelWithString_(label)
+            lbl.setFont_(NSFont.systemFontOfSize_(13))
+            lbl.setFrame_(NSMakeRect(14, 12, w - 120, 20))
+            row.addSubview_(lbl)
+            hk_lbl = NSTextField.labelWithString_(hk)
+            hk_lbl.setFont_(NSFont.monospacedSystemFontOfSize_weight_(13, 0.3))
+            hk_lbl.setTextColor_(NSColor.secondaryLabelColor())
+            hk_lbl.setAlignment_(NSTextAlignmentRight)
+            hk_lbl.setFrame_(NSMakeRect(w - 100, 12, 80, 20))
+            row.addSubview_(hk_lbl)
+
+        y -= 20
+        note = NSTextField.labelWithString_(
+            'Global hotkeys require Accessibility permission in System Settings → Privacy & Security.')
+        note.setFont_(NSFont.systemFontOfSize_(11))
+        note.setTextColor_(NSColor.tertiaryLabelColor())
+        note.setFrame_(NSMakeRect(20, y - 32, w - 40, 32))
+        note.setLineBreakMode_(3)  # NSLineBreakByWordWrapping
+        note.cell().setWraps_(True)
+        parent.addSubview_(note)
+
+    # ── History panel ─────────────────────────────────────────────────────────
+
+    def _build_history(self, parent, w, h, cfg):
+        y = h - 20
+
+        y -= 28
+        self._section_title(parent, 'Storage', y, w)
+
+        # Max items slider row
+        y -= 60
+        row = self._row_view(parent, y, w, h=56)
+        lbl = NSTextField.labelWithString_('Max items to remember')
+        lbl.setFont_(NSFont.systemFontOfSize_(13))
+        lbl.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        row.addSubview_(lbl)
+
+        self._items_slider = NSSlider.alloc().initWithFrame_(
+            NSMakeRect(14, 8, w - 100, 18))
+        self._items_slider.setMinValue_(20)
+        self._items_slider.setMaxValue_(500)
+        self._items_slider.setIntValue_(cfg.max_items)
+        self._items_slider.setTarget_(self)
+        self._items_slider.setAction_('sliderChanged:')
+        row.addSubview_(self._items_slider)
+
+        self._items_label = NSTextField.labelWithString_(str(cfg.max_items))
+        self._items_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
+        self._items_label.setAlignment_(NSTextAlignmentRight)
+        self._items_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        row.addSubview_(self._items_label)
+
+        # Max MB slider row
+        y -= 68
+        row2 = self._row_view(parent, y, w, h=56)
+        lbl2 = NSTextField.labelWithString_('Max buffer size')
+        lbl2.setFont_(NSFont.systemFontOfSize_(13))
+        lbl2.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        row2.addSubview_(lbl2)
+
+        self._mb_slider = NSSlider.alloc().initWithFrame_(
+            NSMakeRect(14, 8, w - 100, 18))
+        self._mb_slider.setMinValue_(10)
+        self._mb_slider.setMaxValue_(500)
+        self._mb_slider.setIntValue_(cfg.buffer_size_mb)
+        self._mb_slider.setTarget_(self)
+        self._mb_slider.setAction_('mbSliderChanged:')
+        row2.addSubview_(self._mb_slider)
+
+        self._mb_label = NSTextField.labelWithString_(f'{cfg.buffer_size_mb} MB')
+        self._mb_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
+        self._mb_label.setAlignment_(NSTextAlignmentRight)
+        self._mb_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        row2.addSubview_(self._mb_label)
+
+    # ── Nav ───────────────────────────────────────────────────────────────────
+
+    def _select_section(self, key):
+        self._active_section = key
+        for k, panel in self._panels.items():
+            panel.setHidden_(k != key)
+        for k, btn in self._nav_btns.items():
+            if k == key:
+                btn.setContentTintColor_(NSColor.controlAccentColor())
+            else:
+                btn.setContentTintColor_(NSColor.secondaryLabelColor())
+
+    def navSelected_(self, sender):
+        self._select_section(str(sender.identifier()))
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -452,7 +595,6 @@ class SettingsWindowController(NSObject):
         col_id = str(self._table.tableColumns()[col].identifier())
         if col_id != 'hotkey':
             return
-        # Open recorder for this row
         def on_recorded(symbol, hotkey_str):
             name, enabled, _hk = self._ds._rows[row]
             self._ds._rows[row] = [name, enabled, hotkey_str or '']
@@ -483,19 +625,42 @@ class SettingsWindowController(NSObject):
         S.save()
         self.hide()
 
+    def cancelSettings_(self, sender):
+        self.hide()
+
+    def _build_rows(self, cfg):
+        hidden = set(cfg.hidden_transforms)
+        hotkeys = cfg.transform_hotkeys
+        all_names = [name for name, _, _ in TRANSFORMS]
+        order = cfg.transform_order or all_names
+        seen = set()
+        names = []
+        for name in order:
+            if name in set(all_names):
+                names.append(name)
+                seen.add(name)
+        for name in all_names:
+            if name not in seen:
+                names.append(name)
+        return [[name, name not in hidden, hotkeys.get(name, '')] for name in names]
+
     def show(self):
+        # Force the app to be active first
+        from AppKit import NSRunningApplication, NSApplicationActivateIgnoringOtherApps
+        app = NSRunningApplication.currentApplication()
+        app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
         self._startup_btn.setState_(NSOnState if startup.is_enabled() else NSOffState)
         cfg = S.get()
         self._items_slider.setIntValue_(cfg.max_items)
         self._items_label.setStringValue_(str(cfg.max_items))
         self._mb_slider.setIntValue_(cfg.buffer_size_mb)
         self._mb_label.setStringValue_(f'{cfg.buffer_size_mb} MB')
-        cfg = S.get()
         rows = self._build_rows(cfg)
         self._ds._rows = rows
         self._table.reloadData()
-        self._window.makeKeyAndOrderFront_(None)
         NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        self._window.makeKeyAndOrderFront_(None)
+        self._window.orderFrontRegardless()
 
     def hide(self):
         self._window.orderOut_(None)
