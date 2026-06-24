@@ -44,8 +44,12 @@ def _scroll_with_textview(x, y, w, h, editable=True):
     tv = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, w - 4, h))
     tv.setFont_(NSFont.monospacedSystemFontOfSize_weight_(12, 0))
     tv.setEditable_(editable)
+    tv.setRichText_(False)
     tv.setAutomaticQuoteSubstitutionEnabled_(False)
     tv.setAutomaticDashSubstitutionEnabled_(False)
+    tv.setAutomaticTextReplacementEnabled_(False)
+    tv.setAutomaticSpellingCorrectionEnabled_(False)
+    tv.setContinuousSpellCheckingEnabled_(False)
     tv.textContainer().setLineFragmentPadding_(8)
     sv.setDocumentView_(tv)
     return sv, tv
@@ -264,7 +268,16 @@ class TransformWindowController(NSObject):
                 self._popup.selectItemAtIndex_(idx)
                 restored = True
         if not restored:
-            self._popup.selectItemAtIndex_(0)
+            # Prefer the first transform with a specific (non-empty) required set
+            # so 'any'-type transforms like JSON Stringify don't take priority
+            from transform import TRANSFORMS as _ALL
+            _req_map = {name: req for name, _, req in _ALL}
+            best = 0
+            for i, (_, name, _fn) in enumerate(self._visible_transforms):
+                if _req_map.get(name):
+                    best = i
+                    break
+            self._popup.selectItemAtIndex_(best)
 
     # ── Actions ─────────────────────────────────────────────────────────────
 
