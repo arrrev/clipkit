@@ -683,6 +683,11 @@ class SettingsWindowController(NSObject):
         cfg.hotkey_open = self._history_hk_str
         cfg.hotkey_transform = self._transform_hk_str
         S.save()
+        # Reload built-in hotkeys in the event tap
+        from AppKit import NSApplication
+        app = NSApplication.sharedApplication().delegate()
+        if app and hasattr(app, '_reload_builtin_hotkeys'):
+            app._reload_builtin_hotkeys()
         self.hide()
 
     def cancelSettings_(self, sender):

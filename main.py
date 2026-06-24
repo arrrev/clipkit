@@ -252,16 +252,29 @@ class ClipKitApp(rumps.App):
             pb.clearContents()
             pb.setString_forType_(result, NSStringPboardType)
 
+        # Pre-compute built-in hotkeys from settings (updated on save via this ref)
+        import settings as S
+        _cfg = S.get()
+        _builtin = [
+            _parse_hotkey(_cfg.hotkey_open or 'cmd+alt+v'),
+            _parse_hotkey(_cfg.hotkey_transform or 'cmd+alt+t'),
+        ]
+
+        def _reload_builtin_hotkeys():
+            S._instance = None
+            cfg = S.get()
+            _builtin[0] = _parse_hotkey(cfg.hotkey_open or 'cmd+alt+v')
+            _builtin[1] = _parse_hotkey(cfg.hotkey_transform or 'cmd+alt+t')
+
+        app_ref._reload_builtin_hotkeys = _reload_builtin_hotkeys
+
         def tap_callback(proxy, event_type, event, refcon):
             try:
                 flags = cg.CGEventGetFlags(event)
                 keycode = cg.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
 
                 # Built-in hotkeys (configurable in Settings → Hotkeys)
-                import settings as S
-                cfg = S.get()
-                hk_open = _parse_hotkey(cfg.hotkey_open or 'cmd+alt+v')
-                hk_transform = _parse_hotkey(cfg.hotkey_transform or 'cmd+alt+t')
+                hk_open, hk_transform = _builtin[0], _builtin[1]
                 if hk_open and keycode == hk_open[1] and (flags & hk_open[0]) == hk_open[0]:
                     app_ref._history_ctrl.performSelectorOnMainThread_withObject_waitUntilDone_(
                         'show', None, False)
