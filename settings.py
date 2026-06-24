@@ -11,8 +11,8 @@ class Settings:
     buffer_size_mb: int = 50
     max_items: int = 200
     start_at_login: bool = False
-    hotkey_open: str = 'cmd+shift+v'
-    hotkey_transform: str = 'cmd+shift+t'
+    hotkey_open: str = 'cmd+alt+v'
+    hotkey_transform: str = 'cmd+alt+t'
     hidden_transforms: list = field(default_factory=list)   # transform names to hide
     transform_order: list = field(default_factory=list)     # transform names in user order
     transform_hotkeys: dict = field(default_factory=dict)  # transform name → hotkey string e.g. "cmd+alt+1"

@@ -158,10 +158,6 @@ class ClipKitApp(rumps.App):
         kCGHeadInsertEventTap = 0
         kCGEventKeyDown       = 10
         kCGKeyboardEventKeycode = 9  # field selector
-        CMD  = 1 << 20
-        ALT  = 1 << 19
-        BOTH = CMD | ALT
-        KEYS = {9: 'history', 17: 'transform'}  # v=9, t=17
 
         # --- CoreGraphics functions ---
         cg.CGEventTapCreate.restype  = ctypes.c_void_p
@@ -261,17 +257,19 @@ class ClipKitApp(rumps.App):
                 flags = cg.CGEventGetFlags(event)
                 keycode = cg.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode)
 
-                # Built-in hotkeys (⌘⌥V / ⌘⌥T)
-                if (flags & BOTH) == BOTH:
-                    action = KEYS.get(keycode)
-                    if action == 'history':
-                        app_ref._history_ctrl.performSelectorOnMainThread_withObject_waitUntilDone_(
-                            'show', None, False)
-                        return None
-                    elif action == 'transform':
-                        app_ref._transform_ctrl.performSelectorOnMainThread_withObject_waitUntilDone_(
-                            'show', None, False)
-                        return None
+                # Built-in hotkeys (configurable in Settings → Hotkeys)
+                import settings as S
+                cfg = S.get()
+                hk_open = _parse_hotkey(cfg.hotkey_open or 'cmd+alt+v')
+                hk_transform = _parse_hotkey(cfg.hotkey_transform or 'cmd+alt+t')
+                if hk_open and keycode == hk_open[1] and (flags & hk_open[0]) == hk_open[0]:
+                    app_ref._history_ctrl.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        'show', None, False)
+                    return None
+                if hk_transform and keycode == hk_transform[1] and (flags & hk_transform[0]) == hk_transform[0]:
+                    app_ref._transform_ctrl.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        'show', None, False)
+                    return None
 
                 # Custom per-transform hotkeys from settings
                 import settings as S

@@ -241,8 +241,28 @@ NAV_ITEMS = [
     ('general',    'General'),
     ('transforms', 'Transforms'),
     ('hotkeys',    'Hotkeys'),
-    ('history',    'History'),
 ]
+
+
+def _hotkey_str_to_display(hk_str):
+    """Convert 'cmd+alt+v' → '⌘⌥V'."""
+    if not hk_str:
+        return ''
+    _MOD_DISPLAY = {
+        'cmd': '⌘', 'command': '⌘',
+        'alt': '⌥', 'option': '⌥', 'opt': '⌥',
+        'ctrl': '⌃', 'control': '⌃',
+        'shift': '⇧',
+    }
+    parts = [p.strip().lower() for p in hk_str.split('+')]
+    result = ''
+    key = ''
+    for p in parts:
+        if p in _MOD_DISPLAY:
+            result += _MOD_DISPLAY[p]
+        else:
+            key = p.upper()
+    return result + key
 
 
 class SettingsWindowController(NSObject):
@@ -261,6 +281,10 @@ class SettingsWindowController(NSObject):
         self._panels = {}       # section key → NSView panel
         self._nav_btns = {}     # section key → NSButton
         self._active_section = 'general'
+        self._history_hk_btn = None
+        self._transform_hk_btn = None
+        self._history_hk_str = ''
+        self._transform_hk_str = ''
         self._build()
         return self
 
@@ -368,12 +392,6 @@ class SettingsWindowController(NSObject):
         cv.addSubview_(hk)
         self._panels['hotkeys'] = hk
 
-        # -- History panel
-        hist = self._make_panel(content_x, BOTTOM_BAR_H, content_w, content_h)
-        self._build_history(hist, content_w, content_h, cfg)
-        cv.addSubview_(hist)
-        self._panels['history'] = hist
-
         self._recorder = HotkeyRecorderPanel.alloc().initWithParent_(self._window)
         self._select_section('general')
 
@@ -407,9 +425,9 @@ class SettingsWindowController(NSObject):
     # ── General panel ─────────────────────────────────────────────────────────
 
     def _build_general(self, parent, w, h, cfg):
-        PAD = 20
         y = h - 20
 
+        # ── Startup ───────────────────────────────────────────────────────────
         y -= 28
         self._section_title(parent, 'Startup', y, w)
 
@@ -427,6 +445,54 @@ class SettingsWindowController(NSObject):
         self._startup_btn.setTarget_(self)
         self._startup_btn.setAction_('toggleStartup:')
         row.addSubview_(self._startup_btn)
+
+        # ── Storage ───────────────────────────────────────────────────────────
+        y -= 36
+        self._section_title(parent, 'Storage', y, w)
+
+        y -= 64
+        row2 = self._row_view(parent, y, w, h=56)
+        lbl2 = NSTextField.labelWithString_('Max items to remember')
+        lbl2.setFont_(NSFont.systemFontOfSize_(13))
+        lbl2.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        row2.addSubview_(lbl2)
+
+        self._items_slider = NSSlider.alloc().initWithFrame_(
+            NSMakeRect(14, 8, w - 100, 18))
+        self._items_slider.setMinValue_(20)
+        self._items_slider.setMaxValue_(500)
+        self._items_slider.setIntValue_(cfg.max_items)
+        self._items_slider.setTarget_(self)
+        self._items_slider.setAction_('sliderChanged:')
+        row2.addSubview_(self._items_slider)
+
+        self._items_label = NSTextField.labelWithString_(str(cfg.max_items))
+        self._items_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
+        self._items_label.setAlignment_(NSTextAlignmentRight)
+        self._items_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        row2.addSubview_(self._items_label)
+
+        y -= 68
+        row3 = self._row_view(parent, y, w, h=56)
+        lbl3 = NSTextField.labelWithString_('Max buffer size')
+        lbl3.setFont_(NSFont.systemFontOfSize_(13))
+        lbl3.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        row3.addSubview_(lbl3)
+
+        self._mb_slider = NSSlider.alloc().initWithFrame_(
+            NSMakeRect(14, 8, w - 100, 18))
+        self._mb_slider.setMinValue_(10)
+        self._mb_slider.setMaxValue_(500)
+        self._mb_slider.setIntValue_(cfg.buffer_size_mb)
+        self._mb_slider.setTarget_(self)
+        self._mb_slider.setAction_('mbSliderChanged:')
+        row3.addSubview_(self._mb_slider)
+
+        self._mb_label = NSTextField.labelWithString_(f'{cfg.buffer_size_mb} MB')
+        self._mb_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
+        self._mb_label.setAlignment_(NSTextAlignmentRight)
+        self._mb_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        row3.addSubview_(self._mb_label)
 
     # ── Transforms panel ─────────────────────────────────────────────────────
 
@@ -487,88 +553,51 @@ class SettingsWindowController(NSObject):
     # ── Hotkeys panel ─────────────────────────────────────────────────────────
 
     def _build_hotkeys(self, parent, w, h):
+        cfg = S.get()
         y = h - 20
 
         y -= 28
         self._section_title(parent, 'Global Hotkeys', y, w)
 
-        for label, hk in [('Open History', '⌘ ⌥ V'), ('Transform Text', '⌘ ⌥ T')]:
-            y -= 50
+        for label, attr, default in [
+            ('Open History',    'hotkey_open',      'cmd+alt+v'),
+            ('Transform Text',  'hotkey_transform', 'cmd+alt+t'),
+        ]:
+            y -= 54
             row = self._row_view(parent, y, w)
             lbl = NSTextField.labelWithString_(label)
             lbl.setFont_(NSFont.systemFontOfSize_(13))
-            lbl.setFrame_(NSMakeRect(14, 12, w - 120, 20))
+            lbl.setFrame_(NSMakeRect(14, 12, w - 160, 20))
             row.addSubview_(lbl)
-            hk_lbl = NSTextField.labelWithString_(hk)
-            hk_lbl.setFont_(NSFont.monospacedSystemFontOfSize_weight_(13, 0.3))
-            hk_lbl.setTextColor_(NSColor.secondaryLabelColor())
-            hk_lbl.setAlignment_(NSTextAlignmentRight)
-            hk_lbl.setFrame_(NSMakeRect(w - 100, 12, 80, 20))
-            row.addSubview_(hk_lbl)
+
+            hk_str = getattr(cfg, attr, default) or default
+            display = _hotkey_str_to_display(hk_str) or '+ set'
+
+            btn = NSButton.alloc().initWithFrame_(NSMakeRect(w - 148, 8, 128, 28))
+            btn.setTitle_(display)
+            btn.setBezelStyle_(NSBezelStyleRounded)
+            btn.setFont_(NSFont.monospacedSystemFontOfSize_weight_(13, 0.3))
+            btn.setTarget_(self)
+            btn.setAction_('globalHotkeyClicked:')
+            btn.setIdentifier_(attr)
+            row.addSubview_(btn)
+
+            if attr == 'hotkey_open':
+                self._history_hk_btn = btn
+                self._history_hk_str = hk_str
+            else:
+                self._transform_hk_btn = btn
+                self._transform_hk_str = hk_str
 
         y -= 20
         note = NSTextField.labelWithString_(
-            'Global hotkeys require Accessibility permission in System Settings → Privacy & Security.')
+            'Click a shortcut to change it. Requires Accessibility permission in System Settings → Privacy & Security.')
         note.setFont_(NSFont.systemFontOfSize_(11))
         note.setTextColor_(NSColor.tertiaryLabelColor())
-        note.setFrame_(NSMakeRect(20, y - 32, w - 40, 32))
-        note.setLineBreakMode_(3)  # NSLineBreakByWordWrapping
+        note.setFrame_(NSMakeRect(20, y - 36, w - 40, 36))
+        note.setLineBreakMode_(3)
         note.cell().setWraps_(True)
         parent.addSubview_(note)
-
-    # ── History panel ─────────────────────────────────────────────────────────
-
-    def _build_history(self, parent, w, h, cfg):
-        y = h - 20
-
-        y -= 28
-        self._section_title(parent, 'Storage', y, w)
-
-        # Max items slider row
-        y -= 60
-        row = self._row_view(parent, y, w, h=56)
-        lbl = NSTextField.labelWithString_('Max items to remember')
-        lbl.setFont_(NSFont.systemFontOfSize_(13))
-        lbl.setFrame_(NSMakeRect(14, 30, w - 120, 18))
-        row.addSubview_(lbl)
-
-        self._items_slider = NSSlider.alloc().initWithFrame_(
-            NSMakeRect(14, 8, w - 100, 18))
-        self._items_slider.setMinValue_(20)
-        self._items_slider.setMaxValue_(500)
-        self._items_slider.setIntValue_(cfg.max_items)
-        self._items_slider.setTarget_(self)
-        self._items_slider.setAction_('sliderChanged:')
-        row.addSubview_(self._items_slider)
-
-        self._items_label = NSTextField.labelWithString_(str(cfg.max_items))
-        self._items_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
-        self._items_label.setAlignment_(NSTextAlignmentRight)
-        self._items_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
-        row.addSubview_(self._items_label)
-
-        # Max MB slider row
-        y -= 68
-        row2 = self._row_view(parent, y, w, h=56)
-        lbl2 = NSTextField.labelWithString_('Max buffer size')
-        lbl2.setFont_(NSFont.systemFontOfSize_(13))
-        lbl2.setFrame_(NSMakeRect(14, 30, w - 120, 18))
-        row2.addSubview_(lbl2)
-
-        self._mb_slider = NSSlider.alloc().initWithFrame_(
-            NSMakeRect(14, 8, w - 100, 18))
-        self._mb_slider.setMinValue_(10)
-        self._mb_slider.setMaxValue_(500)
-        self._mb_slider.setIntValue_(cfg.buffer_size_mb)
-        self._mb_slider.setTarget_(self)
-        self._mb_slider.setAction_('mbSliderChanged:')
-        row2.addSubview_(self._mb_slider)
-
-        self._mb_label = NSTextField.labelWithString_(f'{cfg.buffer_size_mb} MB')
-        self._mb_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
-        self._mb_label.setAlignment_(NSTextAlignmentRight)
-        self._mb_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
-        row2.addSubview_(self._mb_label)
 
     # ── Nav ───────────────────────────────────────────────────────────────────
 
@@ -601,6 +630,29 @@ class SettingsWindowController(NSObject):
             self._table.reloadData()
         self._recorder.recordForRow_callback_(row, on_recorded)
 
+    def globalHotkeyClicked_(self, sender):
+        attr = str(sender.identifier())
+        btn = sender
+
+        def on_recorded(symbol, hotkey_str):
+            if hotkey_str is None:
+                # Escape pressed — clear
+                if attr == 'hotkey_open':
+                    self._history_hk_str = ''
+                    self._history_hk_btn.setTitle_('+ set')
+                else:
+                    self._transform_hk_str = ''
+                    self._transform_hk_btn.setTitle_('+ set')
+                return
+            display = _hotkey_str_to_display(hotkey_str) or hotkey_str
+            btn.setTitle_(display)
+            if attr == 'hotkey_open':
+                self._history_hk_str = hotkey_str
+            else:
+                self._transform_hk_str = hotkey_str
+
+        self._recorder.recordForRow_callback_(0, on_recorded)
+
     def toggleStartup_(self, sender):
         enabled = startup.toggle()
         sender.setState_(NSOnState if enabled else NSOffState)
@@ -622,6 +674,8 @@ class SettingsWindowController(NSObject):
         cfg.transform_order = [name for name, _, _hk in rows]
         cfg.hidden_transforms = [name for name, enabled, _hk in rows if not enabled]
         cfg.transform_hotkeys = {name: hk for name, _, hk in rows if hk.strip()}
+        cfg.hotkey_open = self._history_hk_str
+        cfg.hotkey_transform = self._transform_hk_str
         S.save()
         self.hide()
 
@@ -655,6 +709,11 @@ class SettingsWindowController(NSObject):
         self._items_label.setStringValue_(str(cfg.max_items))
         self._mb_slider.setIntValue_(cfg.buffer_size_mb)
         self._mb_label.setStringValue_(f'{cfg.buffer_size_mb} MB')
+        # Refresh hotkey buttons
+        self._history_hk_str = cfg.hotkey_open or 'cmd+alt+v'
+        self._transform_hk_str = cfg.hotkey_transform or 'cmd+alt+t'
+        self._history_hk_btn.setTitle_(_hotkey_str_to_display(self._history_hk_str) or '+ set')
+        self._transform_hk_btn.setTitle_(_hotkey_str_to_display(self._transform_hk_str) or '+ set')
         rows = self._build_rows(cfg)
         self._ds._rows = rows
         self._table.reloadData()
