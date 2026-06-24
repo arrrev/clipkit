@@ -447,6 +447,12 @@ class SettingsWindowController(NSObject):
         row.addSubview_(self._startup_btn)
 
         # ── Storage ───────────────────────────────────────────────────────────
+        # row width = w-32; keep 12px right padding inside row
+        RW = w - 32
+        VAL_W = 64
+        VAL_X = RW - 12 - VAL_W          # right-aligned inside row
+        SLD_W = VAL_X - 14 - 6           # slider fills remaining width
+
         y -= 36
         self._section_title(parent, 'Storage', y, w)
 
@@ -456,12 +462,6 @@ class SettingsWindowController(NSObject):
         lbl2.setFont_(NSFont.systemFontOfSize_(13))
         lbl2.setFrame_(NSMakeRect(14, 30, SLD_W, 18))
         row2.addSubview_(lbl2)
-
-        # row width = w-32; keep 12px right padding inside row
-        RW = w - 32
-        VAL_W = 64
-        VAL_X = RW - 12 - VAL_W          # right-aligned inside row
-        SLD_W = VAL_X - 14 - 6           # slider fills remaining width
 
         self._items_slider = NSSlider.alloc().initWithFrame_(
             NSMakeRect(14, 8, SLD_W, 18))
