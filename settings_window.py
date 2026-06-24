@@ -454,11 +454,17 @@ class SettingsWindowController(NSObject):
         row2 = self._row_view(parent, y, w, h=56)
         lbl2 = NSTextField.labelWithString_('Max items to remember')
         lbl2.setFont_(NSFont.systemFontOfSize_(13))
-        lbl2.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        lbl2.setFrame_(NSMakeRect(14, 30, SLD_W, 18))
         row2.addSubview_(lbl2)
 
+        # row width = w-32; keep 12px right padding inside row
+        RW = w - 32
+        VAL_W = 64
+        VAL_X = RW - 12 - VAL_W          # right-aligned inside row
+        SLD_W = VAL_X - 14 - 6           # slider fills remaining width
+
         self._items_slider = NSSlider.alloc().initWithFrame_(
-            NSMakeRect(14, 8, w - 100, 18))
+            NSMakeRect(14, 8, SLD_W, 18))
         self._items_slider.setMinValue_(20)
         self._items_slider.setMaxValue_(500)
         self._items_slider.setIntValue_(cfg.max_items)
@@ -469,18 +475,18 @@ class SettingsWindowController(NSObject):
         self._items_label = NSTextField.labelWithString_(str(cfg.max_items))
         self._items_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
         self._items_label.setAlignment_(NSTextAlignmentRight)
-        self._items_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        self._items_label.setFrame_(NSMakeRect(VAL_X, 30, VAL_W, 18))
         row2.addSubview_(self._items_label)
 
         y -= 68
         row3 = self._row_view(parent, y, w, h=56)
         lbl3 = NSTextField.labelWithString_('Max buffer size')
         lbl3.setFont_(NSFont.systemFontOfSize_(13))
-        lbl3.setFrame_(NSMakeRect(14, 30, w - 120, 18))
+        lbl3.setFrame_(NSMakeRect(14, 30, SLD_W, 18))
         row3.addSubview_(lbl3)
 
         self._mb_slider = NSSlider.alloc().initWithFrame_(
-            NSMakeRect(14, 8, w - 100, 18))
+            NSMakeRect(14, 8, SLD_W, 18))
         self._mb_slider.setMinValue_(10)
         self._mb_slider.setMaxValue_(500)
         self._mb_slider.setIntValue_(cfg.buffer_size_mb)
@@ -491,7 +497,7 @@ class SettingsWindowController(NSObject):
         self._mb_label = NSTextField.labelWithString_(f'{cfg.buffer_size_mb} MB')
         self._mb_label.setFont_(NSFont.monospacedDigitSystemFontOfSize_weight_(13, 0))
         self._mb_label.setAlignment_(NSTextAlignmentRight)
-        self._mb_label.setFrame_(NSMakeRect(w - 80, 30, 60, 18))
+        self._mb_label.setFrame_(NSMakeRect(VAL_X, 30, VAL_W, 18))
         row3.addSubview_(self._mb_label)
 
     # ── Transforms panel ─────────────────────────────────────────────────────

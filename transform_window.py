@@ -288,6 +288,10 @@ class TransformWindowController(NSObject):
             result = f'Error: {e}'
         self._output_tv.setString_(result)
         self.__updateOutputMeta(text, result)
+        # Auto-copy result to clipboard
+        pb = NSPasteboard.generalPasteboard()
+        pb.clearContents()
+        pb.setString_forType_(result, NSStringPboardType)
 
     def __updateOutputMeta(self, input_text, output_text):
         # Stats label
