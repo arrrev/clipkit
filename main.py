@@ -308,12 +308,11 @@ class ClipKitApp(rumps.App):
 
         if not tap:
             print('WARNING: CGEventTap failed — Accessibility permission needed.', flush=True)
-            axlib = ctypes.cdll.LoadLibrary(
-                '/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
-            axlib.AXIsProcessTrustedWithOptions.restype = ctypes.c_bool
-            from Foundation import NSDictionary
-            opts = NSDictionary.dictionaryWithObject_forKey_(True, 'AXTrustedCheckOptionPrompt')
-            axlib.AXIsProcessTrustedWithOptions(ctypes.py_object(opts))
+            import subprocess
+            subprocess.Popen([
+                'open',
+                'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+            ])
             return
 
         cg.CGEventTapEnable(tap, True)
