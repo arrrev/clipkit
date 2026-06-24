@@ -51,9 +51,12 @@ class ClipKitApp(rumps.App):
 
     def __init__(self):
         super().__init__('✂', quit_button=None)
+        cfg = S.get()
+        self._menu_history   = rumps.MenuItem('', callback=self.show_history)
+        self._menu_transform = rumps.MenuItem('', callback=self.show_transform)
         self.menu = [
-            rumps.MenuItem('Show History   ⌘⌥V', callback=self.show_history),
-            rumps.MenuItem('Transform Text   ⌘⌥T', callback=self.show_transform),
+            self._menu_history,
+            self._menu_transform,
             None,
             rumps.MenuItem('Settings…', callback=self.show_settings),
             None,
@@ -61,6 +64,7 @@ class ClipKitApp(rumps.App):
             None,
             rumps.MenuItem('Quit ClipKit', callback=self.quit_app),
         ]
+        self._update_menu_titles(cfg)
 
         self._history_ctrl   = HistoryWindowController.alloc().init()
         self._transform_ctrl = TransformWindowController.alloc().init()
@@ -83,6 +87,15 @@ class ClipKitApp(rumps.App):
 
         # Pin the status item so macOS remembers its position
         rumps.Timer(self._pin_status_item, 0.5).start()
+
+    def _update_menu_titles(self, cfg=None):
+        if cfg is None:
+            cfg = S.get()
+        from settings_window import _hotkey_str_to_display
+        hk_h = _hotkey_str_to_display(cfg.hotkey_open or 'cmd+alt+v') or '⌘⌥V'
+        hk_t = _hotkey_str_to_display(cfg.hotkey_transform or 'cmd+alt+t') or '⌘⌥T'
+        self._menu_history.title   = f'Show History   {hk_h}'
+        self._menu_transform.title = f'Transform Text   {hk_t}'
 
     def _start_monitor(self, timer):
         timer.stop()
@@ -265,6 +278,7 @@ class ClipKitApp(rumps.App):
             cfg = S.get()
             _builtin[0] = _parse_hotkey(cfg.hotkey_open or 'cmd+alt+v')
             _builtin[1] = _parse_hotkey(cfg.hotkey_transform or 'cmd+alt+t')
+            app_ref._update_menu_titles(cfg)
 
         app_ref._reload_builtin_hotkeys = _reload_builtin_hotkeys
 
