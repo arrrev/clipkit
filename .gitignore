@@ -1,11 +1,7 @@
-__pycache__/
-*.pyc
-*.pyo
-build/
+node_modules/
 dist/
-*.egg-info/
-.DS_Store
 *.dmg
 *.zip
-ClipKit.icns
-~/.clipkit/
+*.blockmap
+builder-debug.yml
+.DS_Store

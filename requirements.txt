@@ -1,4 +1,0 @@
-pyobjc-core>=9.0
-pyobjc-framework-Cocoa>=9.0
-pyobjc-framework-Quartz>=9.0
-Pillow>=9.0

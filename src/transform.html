@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>ClipKit — Transform</title>
+  <link rel="stylesheet" href="transform.css" />
+</head>
+<body>
+  <section class="block">
+    <div class="block-head">
+      <span class="label">INPUT</span>
+      <button id="paste" class="ghost">Paste from Clipboard</button>
+    </div>
+    <textarea id="input" class="area" placeholder="Paste or type text to transform…"></textarea>
+  </section>
+
+  <div class="controls">
+    <select id="select" class="select"></select>
+    <button id="apply" class="primary">Apply</button>
+    <button id="swap" class="ghost" title="Swap input/output">⇅ Swap</button>
+  </div>
+
+  <section class="block">
+    <div class="block-head">
+      <span class="label">OUTPUT</span>
+      <span id="outBadge" class="badge Text">Text</span>
+      <span id="stats" class="stats"></span>
+      <button id="save" class="ghost" style="margin-left:auto" disabled>Save to file</button>
+    </div>
+    <textarea id="output" class="area" readonly placeholder="Result appears here (auto-copied to clipboard)."></textarea>
+  </section>
+
+  <script src="transforms.js"></script>
+  <script src="transform.js"></script>
+</body>
+</html>

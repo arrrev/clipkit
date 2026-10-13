@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>ClipKit — Settings</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <nav class="sidebar">
+    <button class="nav active" data-tab="general">General</button>
+    <button class="nav" data-tab="transforms">Transforms</button>
+    <button class="nav" data-tab="hotkeys">Hotkeys</button>
+  </nav>
+
+  <main class="content">
+    <!-- General -->
+    <section class="tab-panel active" data-panel="general">
+      <h2>General</h2>
+      <div class="field row">
+        <label for="launch">Launch at login</label>
+        <input type="checkbox" id="launch" class="switch" />
+      </div>
+      <div class="field">
+        <label>Max items <span id="maxItemsVal" class="val"></span></label>
+        <input type="range" id="maxItems" min="20" max="500" step="10" />
+      </div>
+      <div class="field">
+        <label>Max buffer size <span id="maxBufferVal" class="val"></span></label>
+        <input type="range" id="maxBuffer" min="10" max="500" step="10" />
+      </div>
+    </section>
+
+    <!-- Transforms -->
+    <section class="tab-panel" data-panel="transforms">
+      <h2>Transforms</h2>
+      <p class="hint">Drag to reorder · toggle to enable/disable · click hotkey to assign.</p>
+      <ul id="transformList" class="tlist"></ul>
+    </section>
+
+    <!-- Hotkeys -->
+    <section class="tab-panel" data-panel="hotkeys">
+      <h2>Hotkeys</h2>
+      <div class="field row">
+        <label>Open History</label>
+        <button class="hk-record" id="hkOpen" data-key="hotkeyOpen"></button>
+      </div>
+      <div class="field row">
+        <label>Transform Text</label>
+        <button class="hk-record" id="hkTransform" data-key="hotkeyTransform"></button>
+      </div>
+      <div class="field row">
+        <label>Paste Previous</label>
+        <button class="hk-record" id="hkPastePrev" data-key="hotkeyPastePrev"></button>
+      </div>
+      <p class="hint">Click a button, then press the key combination you want. Right-click to clear.</p>
+    </section>
+  </main>
+
+  <script src="settings.js"></script>
+</body>
+</html>
